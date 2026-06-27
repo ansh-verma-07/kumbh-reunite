@@ -12,6 +12,7 @@ import {
   mergeCase,
   clearProbable,
   runTick,
+  enrichBatch,
   type ZoneRisk,
 } from "@/lib/ops";
 import { exportBriefing } from "@/lib/pdf";
@@ -33,6 +34,7 @@ export default function PolicePage() {
   const [tips, setTips] = useState<TipDoc[]>([]);
   const [busy, setBusy] = useState(false);
   const [tickMsg, setTickMsg] = useState<string | null>(null);
+  const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [z, c, p, t] = await Promise.all([
@@ -105,6 +107,30 @@ export default function PolicePage() {
     }
   }
 
+  async function runEnrichBatch() {
+    setBusy(true);
+    setEnrichMsg("Starting enrichment…");
+    let totalEnriched = 0;
+    let totalFailed = 0;
+    try {
+      let remaining = Infinity;
+      while (remaining > 0) {
+        const r = await enrichBatch();
+        totalEnriched += r.enriched;
+        totalFailed += r.failed;
+        remaining = r.remaining;
+        setEnrichMsg(
+          `Enriching… ${totalEnriched} done${totalFailed ? `, ${totalFailed} failed` : ""}${remaining > 0 ? `, ${remaining} remaining` : " — complete!"}`,
+        );
+      }
+      await load();
+    } catch (e) {
+      setEnrichMsg(`Error: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const stats = [
     { label: "Open cases", value: cases.length, bg: "var(--danger)" },
     { label: "Pending PA", value: pendingPa.length, bg: "var(--warning)" },
@@ -131,9 +157,13 @@ export default function PolicePage() {
           <button onClick={tick} disabled={busy} className="nb-btn nb-btn-warning">
             Run scheduler tick ⚡
           </button>
+          <button onClick={runEnrichBatch} disabled={busy} className="nb-btn">
+            Enrich all cases (Gemini)
+          </button>
         </div>
       </div>
       {tickMsg && <div className="nb-card-flat p-2 text-xs font-bold">{tickMsg}</div>}
+      {enrichMsg && <div className="nb-card-flat p-2 text-xs font-bold">{enrichMsg}</div>}
 
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {stats.map((s) => (

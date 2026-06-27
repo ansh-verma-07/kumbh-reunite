@@ -87,6 +87,12 @@ export async function runTick(accelerate = false): Promise<Record<string, number
   return (await res.json()).actions;
 }
 
+export async function enrichBatch(): Promise<{ total: number; enriched: number; failed: number; remaining: number }> {
+  const res = await apiFetch("/api/admin/enrich-batch", { method: "POST" });
+  if (!res.ok) throw new Error(`enrich-batch failed (${res.status})`);
+  return res.json();
+}
+
 export async function renewShareLink(linkId: string): Promise<string> {
   const res = await apiFetch(`/api/sharelinks/${linkId}/renew`, { method: "POST" });
   if (!res.ok) {
