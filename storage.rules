@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Case photos: staff read/write. Public case views fetch via server-signed
+    // URLs, so no public read of raw storage objects.
+    match /cases/{caseId}/{fileName} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
