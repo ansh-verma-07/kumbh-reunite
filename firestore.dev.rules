@@ -1,0 +1,23 @@
+// DEV ONLY — paste into Firebase Console → Firestore → Rules → Publish.
+// Lets any signed-in (incl. anonymous) user operate, so you can test without
+// deploying role custom claims. Do NOT use in production — the real, role-gated
+// rules live in firestore.rules.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public read of an unexpired share link (matches the production behavior).
+    match /shareLinks/{linkId} {
+      allow get: if resource.data.expiresAt > request.time.toMillis();
+      allow write: if request.auth != null;
+    }
+    // Tips: anyone may submit a sighting.
+    match /tips/{tipId} {
+      allow create: if true;
+      allow read, update: if request.auth != null;
+    }
+    // Everything else: any signed-in user (DEV).
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

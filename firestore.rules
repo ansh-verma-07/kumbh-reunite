@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function role() {
+      return isSignedIn() ? request.auth.token.role : null;
+    }
+    function isStaff() {
+      return role() == 'volunteer' || role() == 'supervisor' || role() == 'police';
+    }
+
+    // Cases: staff create/edit; police read-only (and must not see reporterMobile —
+    // enforced via a dedicated aggregated view in the app, not raw case reads).
+    match /cases/{caseId} {
+      allow read: if isStaff();
+      allow create: if role() == 'volunteer' || role() == 'supervisor';
+      allow update: if role() == 'volunteer' || role() == 'supervisor';
+      allow delete: if false;
+    }
+
+    // Share links: PUBLIC read of a single unexpired link doc (no listing).
+    // The link doc only points at a caseId; the public case view is served
+    // server-side so reporter contact details are never exposed.
+    match /shareLinks/{linkId} {
+      allow get: if resource.data.expiresAt > request.time.toMillis();
+      allow list: if false;
+      allow write: if role() == 'volunteer' || role() == 'supervisor';
+    }
+
+    // Tips: anyone may create (rate-limit via App Check in production); no public read.
+    match /tips/{tipId} {
+      allow create: if true;
+      allow read, update: if isStaff();
+      allow delete: if false;
+    }
+
+    // Zones: staff read; written only by server (Admin SDK bypasses rules).
+    match /zones/{zoneId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+  }
+}
