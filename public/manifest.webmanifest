@@ -1,0 +1,12 @@
+{
+  "name": "Kumbh Reunite",
+  "short_name": "Reunite",
+  "description": "Unified missing-person registry for the Nashik Kumbh Mela 2027",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf6e3",
+  "theme_color": "#ffd23f",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

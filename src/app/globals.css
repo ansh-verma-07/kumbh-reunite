@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+/* ============ Neo-brutalist design system ============ */
+:root {
+  --bg: #fdf6e3;        /* paper / cream */
+  --ink: #111111;       /* hard black */
+  --primary: #2d5bff;   /* electric blue */
+  --success: #00c853;   /* green */
+  --danger: #ff5252;    /* red */
+  --warning: #ffd23f;   /* yellow */
+  --accent: #ff5ca8;    /* pink */
+  --lime: #b8ff5c;
+  --cyan: #5cd2ff;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-ink: var(--ink);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Background grid texture */
+body {
+  background-image:
+    linear-gradient(rgba(17, 17, 17, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 17, 17, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* ---- Components ---- */
+.nb-card {
+  background: #fff;
+  border: 3px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+
+.nb-card-flat {
+  background: #fff;
+  border: 3px solid var(--ink);
+}
+
+.nb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 3px solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 800;
+  padding: 0.55rem 1rem;
+  box-shadow: 4px 4px 0 var(--ink);
+  cursor: pointer;
+  transition:
+    transform 0.06s ease,
+    box-shadow 0.06s ease;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+.nb-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+.nb-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+.nb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.nb-btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+.nb-btn-success {
+  background: var(--success);
+  color: var(--ink);
+}
+.nb-btn-warning {
+  background: var(--warning);
+  color: var(--ink);
+}
+
+.nb-input,
+.nb-select,
+.nb-textarea {
+  width: 100%;
+  border: 3px solid var(--ink);
+  background: #fff;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+  outline: none;
+}
+.nb-input:focus,
+.nb-select:focus,
+.nb-textarea:focus {
+  box-shadow: 4px 4px 0 var(--primary);
+}
+
+.nb-badge {
+  display: inline-block;
+  border: 2px solid var(--ink);
+  padding: 0.1rem 0.5rem;
+  font-weight: 800;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.nb-chip {
+  display: inline-block;
+  border: 2px solid var(--ink);
+  background: #fff;
+  padding: 0.1rem 0.5rem;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+
+.nb-label {
+  font-weight: 800;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
