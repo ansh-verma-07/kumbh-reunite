@@ -55,6 +55,15 @@ export default function CaseDetailPage() {
   if (!c) return <p className="font-bold">Case not found.</p>;
 
   const s = c.descriptionStructured;
+  const structuredChips: [string, string][] = s
+    ? [
+        ...s.clothingColours.map((x): [string, string] => ["colour", x]),
+        ...s.garmentTypes.map((x): [string, string] => ["garment", x]),
+        ...s.distinguishingMarks.map((x): [string, string] => ["mark", x]),
+        ...s.healthIndicators.map((x): [string, string] => ["health", x]),
+        ...s.destinationMentioned.map((x): [string, string] => ["destination", x]),
+      ]
+    : [];
   const statusColor =
     c.status === "missing"
       ? "var(--danger)"
@@ -97,7 +106,28 @@ export default function CaseDetailPage() {
         <Row k="Gender" v={c.gender} />
         <Row k="Last seen" v={c.lastSeenZone ?? "—"} />
         <Row k="Enriched" v={c.embeddedAt ? "yes" : "pending (offline?)"} />
-        <Row k="Share link" v={c.shareLinkId ? `/find/${c.shareLinkId}` : "—"} />
+        {c.shareLinkId ? (
+          <>
+            <dt className="uppercase text-xs opacity-60">Share link</dt>
+            <dd className="text-right sm:text-left">
+              <div className="flex items-center gap-2 flex-wrap">
+                <a
+                  href={`/find/${c.shareLinkId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline break-all"
+                >
+                  {typeof window !== "undefined"
+                    ? `${window.location.origin}/find/${c.shareLinkId}`
+                    : `/find/${c.shareLinkId}`}
+                </a>
+                <CopyButton text={typeof window !== "undefined" ? `${window.location.origin}/find/${c.shareLinkId}` : `/find/${c.shareLinkId}`} />
+              </div>
+            </dd>
+          </>
+        ) : (
+          <Row k="Share link" v="—" />
+        )}
       </dl>
 
       {c.descriptionRaw && (
@@ -110,19 +140,17 @@ export default function CaseDetailPage() {
       {s && (
         <div className="nb-card-flat p-4">
           <h2 className="nb-label mb-2">Structured (Gemini)</h2>
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              ...s.clothingColours.map((x) => ["colour", x] as const),
-              ...s.garmentTypes.map((x) => ["garment", x] as const),
-              ...s.distinguishingMarks.map((x) => ["mark", x] as const),
-              ...s.healthIndicators.map((x) => ["health", x] as const),
-              ...s.destinationMentioned.map((x) => ["destination", x] as const),
-            ].map(([t, x], i) => (
-              <span key={i} className="nb-chip bg-[var(--cyan)]">
-                <span className="opacity-60">{t}:</span> {x}
-              </span>
-            ))}
-          </div>
+          {structuredChips.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {structuredChips.map(([t, x], i) => (
+                <span key={i} className="nb-chip bg-[var(--cyan)]">
+                  <span className="opacity-60">{t}:</span> {x}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm opacity-50 italic">No features extracted from description.</p>
+          )}
         </div>
       )}
 
@@ -132,7 +160,7 @@ export default function CaseDetailPage() {
             Mark reunited
           </button>
         )}
-        {!c.embeddedAt && (
+        {(!c.embeddedAt || !c.descriptionStructured) && c.descriptionRaw && (
           <button onClick={reEnrich} disabled={busy} className="nb-btn">
             Run enrichment now
           </button>
@@ -151,5 +179,24 @@ function Row({ k, v }: { k: string; v: string }) {
       <dt className="uppercase text-xs opacity-60">{k}</dt>
       <dd className="text-right sm:text-left">{v}</dd>
     </>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+  return (
+    <button
+      onClick={copy}
+      className="nb-btn text-xs py-0.5 px-2 shrink-0"
+      title="Copy link"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
   );
 }

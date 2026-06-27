@@ -1,10 +1,11 @@
 // Case collection endpoints (server-side, Admin SDK — bypasses Security Rules).
 //   GET  /api/cases        -> { cases: CaseDoc[] }  (open cases)
 //   POST /api/cases  body=NewCaseInput -> { id, caseId, shareLinkId? }
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { verifyRequest, AuthError } from "@/lib/auth";
+import { normalizeDescription, embedText } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 
@@ -104,6 +105,28 @@ export async function POST(req: Request) {
     });
     await ref.update({ shareLinkId });
   }
+
+  // Fire enrichment after response so case creation is not blocked.
+  after(async () => {
+    try {
+      const parts = [input.name, input.descriptionRaw, (input.conditionTags ?? []).join(" ")]
+        .filter(Boolean)
+        .join(". ");
+      const text = parts || input.gender || "unknown";
+      const [structured, vector] = await Promise.all([
+        input.descriptionRaw ? normalizeDescription(input.descriptionRaw) : Promise.resolve(null),
+        embedText(text),
+      ]);
+      await ref.update({
+        ...(structured ? { descriptionStructured: structured } : {}),
+        embedding: vector,
+        embeddedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    } catch (e) {
+      console.error("post-create enrichment failed", e);
+    }
+  });
 
   return NextResponse.json({ id: ref.id, caseId, shareLinkId });
 }
