@@ -5,6 +5,7 @@ import Link from "next/link";
 import { listOpenCases } from "@/lib/cases";
 import { AGE_BANDS } from "@/lib/types";
 import type { CaseDoc } from "@/lib/types";
+import { useTranslation } from "@/components/LanguageProvider";
 
 // ---------------------------------------------------------------------------
 // Demo fallback — illustrative figures derived from the 2,500-record synthetic
@@ -72,6 +73,7 @@ interface Bar {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const [cases, setCases] = useState<CaseDoc[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -97,24 +99,29 @@ export default function Dashboard() {
   // registry-wide outcome picture from the synthetic sample.
   const kpis: { label: string; value: string; sub: string; color: string }[] = live
     ? [
-        { label: "Open missing", value: String(missing), sub: "active searches", color: "var(--danger)" },
-        { label: "Open found", value: String(found), sub: "awaiting family", color: "var(--success)" },
-        { label: "Total open", value: String(cases.length), sub: "across all centres", color: "var(--cyan)" },
-        { label: "Centres reporting", value: String(byCentre.size), sub: "of 10 centres", color: "var(--accent)" },
+        { label: t("kpi_open_missing"), value: String(missing), sub: "active searches", color: "var(--danger)" },
+        { label: t("kpi_open_found"), value: String(found), sub: "awaiting family", color: "var(--success)" },
+        { label: t("kpi_total_open"), value: String(cases.length), sub: "across all centres", color: "var(--cyan)" },
+        { label: t("kpi_centres"), value: String(byCentre.size), sub: "of 10 centres", color: "var(--accent)" },
       ]
     : [
-        { label: "Reunited", value: `${Math.round((DEMO.reunited / DEMO.total) * 100)}%`, sub: `${DEMO.reunited} people`, color: "var(--success)" },
-        { label: "Still pending", value: String(DEMO.pending), sub: "open searches", color: "var(--warning)" },
-        { label: "Unresolved", value: String(DEMO.unresolved), sub: "need escalation", color: "var(--danger)" },
-        { label: "Cross-centre duplicates", value: String(DEMO.duplicates), sub: "the core problem", color: "var(--accent)" },
+        { label: t("kpi_reunited"), value: `${Math.round((DEMO.reunited / DEMO.total) * 100)}%`, sub: `${DEMO.reunited} people`, color: "var(--success)" },
+        { label: t("kpi_pending"), value: String(DEMO.pending), sub: "open searches", color: "var(--warning)" },
+        { label: t("kpi_unresolved"), value: String(DEMO.unresolved), sub: "need escalation", color: "var(--danger)" },
+        { label: t("kpi_duplicates"), value: String(DEMO.duplicates), sub: "the core problem", color: "var(--accent)" },
       ];
 
   const statusBars: Bar[] = live
     ? [
-        { label: "Open missing", value: missing, color: "var(--danger)" },
-        { label: "Open found", value: found, color: "var(--success)" },
+        { label: t("kpi_open_missing"), value: missing, color: "var(--danger)" },
+        { label: t("kpi_open_found"), value: found, color: "var(--success)" },
       ]
-    : DEMO_STATUS;
+    : [
+        { label: t("kpi_reunited"), value: DEMO.reunited, color: "var(--success)" },
+        { label: t("kpi_pending"), value: DEMO.pending, color: "var(--warning)" },
+        { label: "Transferred", value: DEMO.transferred, color: "var(--cyan)" },
+        { label: t("kpi_unresolved"), value: DEMO.unresolved, color: "var(--danger)" },
+      ];
 
   const ageBars: Bar[] = live
     ? AGE_BANDS.map((b) => ({ label: b, value: cases.filter((c) => c.ageBand === b).length }))
@@ -137,11 +144,8 @@ export default function Dashboard() {
       {/* ---- Header ---- */}
       <section className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl uppercase">Command dashboard</h1>
-          <p className="mt-2 font-semibold max-w-xl">
-            One shared registry across all 10 Kho-Ya-Paya centres. A person found at one
-            centre is visible to a family searching at another.
-          </p>
+          <h1 className="text-4xl uppercase">{t("dash_title")}</h1>
+          <p className="mt-2 font-semibold max-w-xl">{t("dash_subtitle")}</p>
         </div>
         <span
           className="nb-badge shrink-0"
@@ -150,7 +154,7 @@ export default function Dashboard() {
           }}
           title={demo ? "Showing the synthetic 2,500-record sample" : "Connected to the live registry"}
         >
-          ● {demo ? "Demo data · synthetic sample" : "Live registry"}
+          ● {demo ? t("dash_demo_badge") : t("dash_live_badge")}
         </span>
       </section>
 
@@ -175,10 +179,10 @@ export default function Dashboard() {
       {/* ---- Primary actions ---- */}
       <section className="flex flex-wrap gap-3">
         <Link href="/new" className="nb-btn nb-btn-primary">
-          + File a new case
+          {t("dash_btn_new")}
         </Link>
         <Link href="/search" className="nb-btn">
-          Search registry
+          {t("dash_btn_search")}
         </Link>
       </section>
 
@@ -188,7 +192,7 @@ export default function Dashboard() {
         <div className="lg:col-span-2 space-y-6">
           {demo && (
             <div className="nb-card p-4">
-              <h2 className="nb-label">Reports per day · spikes on Amrit Snan</h2>
+              <h2 className="nb-label">{t("dash_daily_chart")}</h2>
               <div className="mt-4 flex items-end gap-1 h-36">
                 {DEMO_DAILY.map((v, i) => (
                   <div
@@ -210,7 +214,7 @@ export default function Dashboard() {
           )}
 
           <div className="nb-card p-4">
-            <h2 className="nb-label">Who goes missing · by age band</h2>
+            <h2 className="nb-label">{t("dash_age_chart")}</h2>
             <div className="mt-4 space-y-2">
               {ageBars.map((b) => (
                 <div key={b.label} className="flex items-center gap-3 text-sm font-bold">
@@ -242,7 +246,7 @@ export default function Dashboard() {
         {/* Right column (1/3) — status + infra + privacy */}
         <div className="space-y-6">
           <div className="nb-card p-4">
-            <h2 className="nb-label">Status breakdown</h2>
+            <h2 className="nb-label">{t("dash_status_chart")}</h2>
             <div className="mt-4 space-y-3">
               {statusBars.map((b) => (
                 <div key={b.label}>
@@ -278,7 +282,7 @@ export default function Dashboard() {
           </div>
 
           <div className="nb-card p-4">
-            <h2 className="nb-label">Infrastructure coverage</h2>
+            <h2 className="nb-label">{t("dash_infra_chart")}</h2>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {[
                 { v: DEMO.cctv.toLocaleString(), l: "CCTV cameras", c: "var(--cyan)" },
@@ -295,7 +299,7 @@ export default function Dashboard() {
           </div>
 
           <div className="nb-card p-4">
-            <h2 className="nb-label">Privacy by design</h2>
+            <h2 className="nb-label">{t("dash_privacy_title")}</h2>
             <ul className="mt-3 space-y-1.5 text-sm font-bold">
               {[
                 "Contact numbers masked in every view",
@@ -316,7 +320,7 @@ export default function Dashboard() {
       {/* ---- Cases by centre ---- */}
       <section>
         <h2 className="nb-label mb-2">
-          Cases by centre · {totalLabel} reports across {centresLabel} centres
+          {t("dash_by_centre")} · {totalLabel} reports across {centresLabel} centres
         </h2>
         <div className="nb-card divide-y-[3px] divide-ink">
           {centreRows.map(([centre, n]) => (
@@ -333,7 +337,7 @@ export default function Dashboard() {
           ))}
           {centreRows.length === 0 && (
             <div className="px-4 py-8 text-center text-sm font-bold opacity-60">
-              No cases yet.
+              {t("dash_no_cases")}
             </div>
           )}
         </div>
