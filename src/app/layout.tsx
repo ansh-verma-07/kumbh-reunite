@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
+import { LanguageProvider } from "@/components/LanguageProvider";
 import { NavBar } from "@/components/NavBar";
 import { SWRegister } from "@/components/SWRegister";
 import { SyncManager } from "@/components/SyncManager";
@@ -38,10 +39,12 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <SWRegister />
-          <SyncManager />
-          <NavBar />
-          <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-8">{children}</main>
+          <LanguageProvider>
+            <SWRegister />
+            <SyncManager />
+            <NavBar />
+            <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-8">{children}</main>
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>

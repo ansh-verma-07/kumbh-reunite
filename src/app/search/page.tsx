@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { listOpenCases } from "@/lib/cases";
 import { AGE_BANDS, type CaseDoc } from "@/lib/types";
+import { useTranslation } from "@/components/LanguageProvider";
 
 export default function SearchPage() {
+  const { t } = useTranslation();
   const [all, setAll] = useState<CaseDoc[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -45,7 +47,7 @@ export default function SearchPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-4xl uppercase">Search registry</h1>
+      <h1 className="text-4xl uppercase">{t("search_title")}</h1>
 
       {error && (
         <div className="nb-card-flat bg-[var(--warning)] p-3 font-bold text-sm">{error}</div>
@@ -54,19 +56,19 @@ export default function SearchPage() {
       <div className="grid sm:grid-cols-4 gap-3">
         <input
           className="nb-input sm:col-span-2"
-          placeholder="Name, case ID, clothing, zone…"
+          placeholder={t("search_placeholder")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
         <select className="nb-select" value={gender} onChange={(e) => setGender(e.target.value)}>
-          <option value="">Any gender</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-          <option value="other">Other</option>
-          <option value="unknown">Unknown</option>
+          <option value="">{t("search_any_gender")}</option>
+          <option value="male">{t("search_male")}</option>
+          <option value="female">{t("search_female")}</option>
+          <option value="other">{t("search_other")}</option>
+          <option value="unknown">{t("search_unknown")}</option>
         </select>
         <select className="nb-select" value={ageBand} onChange={(e) => setAgeBand(e.target.value)}>
-          <option value="">Any age</option>
+          <option value="">{t("search_any_age")}</option>
           {AGE_BANDS.map((a) => (
             <option key={a}>{a}</option>
           ))}
@@ -75,9 +77,9 @@ export default function SearchPage() {
 
       <div className="flex gap-2 items-center">
         {[
-          { v: "", label: "All" },
-          { v: "missing", label: "Missing" },
-          { v: "found", label: "Found" },
+          { v: "", label: t("search_all") },
+          { v: "missing", label: t("search_missing") },
+          { v: "found", label: t("search_found") },
         ].map((o) => (
           <button
             key={o.v}
@@ -90,7 +92,7 @@ export default function SearchPage() {
             {o.label}
           </button>
         ))}
-        <span className="ml-auto nb-chip bg-[var(--lime)]">{results.length} results</span>
+        <span className="ml-auto nb-chip bg-[var(--lime)]">{results.length} {t("search_results")}</span>
       </div>
 
       <div className="nb-card divide-y-[3px] divide-ink">
@@ -108,12 +110,12 @@ export default function SearchPage() {
             )}
             <div className="flex-1">
               <div className="text-sm font-extrabold">
-                {c.name || "(no name)"}{" "}
+                {c.name || t("search_no_name")}{" "}
                 <span className="opacity-50 font-mono">· {c.caseId}</span>
               </div>
               <div className="text-xs font-semibold opacity-70">
                 {c.kind} · {c.centreId} · {c.ageBand ?? "?"} · {c.gender}
-                {c.lastSeenZone ? ` · last seen ${c.lastSeenZone}` : ""}
+                {c.lastSeenZone ? ` · ${t("search_last_seen")} ${c.lastSeenZone}` : ""}
               </div>
             </div>
             <span
@@ -125,7 +127,7 @@ export default function SearchPage() {
           </Link>
         ))}
         {results.length === 0 && (
-          <div className="px-4 py-10 text-center font-bold opacity-60">No matches.</div>
+          <div className="px-4 py-10 text-center font-bold opacity-60">{t("search_no_matches")}</div>
         )}
       </div>
     </div>
