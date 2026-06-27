@@ -5,6 +5,7 @@
 
 import type { CaseDoc, CaseKind, CaseStatus } from "@/lib/types";
 import { enqueue } from "@/lib/offlineQueue";
+import { apiFetch } from "@/lib/fetchAuth";
 
 export interface NewCaseInput {
   kind: CaseKind;
@@ -27,20 +28,17 @@ export type CreateResult =
   | { id: string; caseId: string; shareLinkId?: string };
 
 export async function createCase(input: NewCaseInput): Promise<CreateResult> {
-  // Offline → queue locally; SyncManager flushes on reconnect.
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     enqueue(input);
     return { queued: true };
   }
   let res: Response;
   try {
-    res = await fetch("/api/cases", {
+    res = await apiFetch("/api/cases", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
   } catch {
-    // Network failure mid-request → queue rather than lose the case.
     enqueue(input);
     return { queued: true };
   }
@@ -52,25 +50,32 @@ export async function createCase(input: NewCaseInput): Promise<CreateResult> {
 }
 
 export async function getCase(id: string): Promise<CaseDoc | null> {
-  const res = await fetch(`/api/cases/${id}`);
+  const res = await apiFetch(`/api/cases/${id}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`load failed (${res.status})`);
   return (await res.json()).case as CaseDoc;
 }
 
 export async function listOpenCases(): Promise<CaseDoc[]> {
-  const res = await fetch("/api/cases");
+  const res = await apiFetch("/api/cases");
   if (!res.ok) throw new Error(`list failed (${res.status})`);
   return (await res.json()).cases as CaseDoc[];
 }
 
 export async function setCaseStatus(id: string, status: CaseStatus): Promise<void> {
-  const res = await fetch(`/api/cases/${id}`, {
+  const res = await apiFetch(`/api/cases/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
   if (!res.ok) throw new Error(`update failed (${res.status})`);
+}
+
+export async function deleteCase(id: string): Promise<void> {
+  const res = await apiFetch(`/api/cases/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error ?? `delete failed (${res.status})`);
+  }
 }
 
 export async function submitTip(
@@ -78,9 +83,8 @@ export async function submitTip(
   location?: string,
   note?: string,
 ): Promise<void> {
-  const res = await fetch("/api/tips", {
+  const res = await apiFetch("/api/tips", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ caseId, location, note }),
   });
   if (!res.ok) throw new Error(`tip failed (${res.status})`);

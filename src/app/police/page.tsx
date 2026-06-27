@@ -49,6 +49,8 @@ export default function PolicePage() {
 
   useEffect(() => {
     load();
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const conflicts = cases.filter((c) => c.mergeReview);
@@ -113,7 +115,12 @@ export default function PolicePage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-4xl uppercase">Command</h1>
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-4xl uppercase">Command</h1>
+          <span className="text-xs font-extrabold uppercase tracking-widest opacity-60">
+            Live · 30 s
+          </span>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => exportBriefing({ zones, cases, pa, tips })}

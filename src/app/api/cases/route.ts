@@ -4,29 +4,42 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { verifyRequest, AuthError } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 const SHARE_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Strip non-JSON-serializable / internal fields before returning to the client.
-function clean(id: string, data: FirebaseFirestore.DocumentData): Record<string, unknown> {
+// Strip internal fields; police never see reporterMobile.
+function clean(
+  id: string,
+  data: FirebaseFirestore.DocumentData,
+  role: string,
+): Record<string, unknown> {
   const { embedding, serverCreatedAt, ...rest } = data;
   void embedding;
   void serverCreatedAt;
+  if (role === "police") delete rest.reporterMobile;
   return { id, ...rest };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  let role = "volunteer";
+  try {
+    const auth = await verifyRequest(req);
+    role = auth?.role ?? "volunteer";
+  } catch (e) {
+    if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
+  }
+
   const db = getAdminDb();
-  // Single-field `in` filter (no composite index needed); sort in memory.
   const snap = await db
     .collection("cases")
     .where("status", "in", ["missing", "found"])
     .limit(500)
     .get();
   const cases = snap.docs
-    .map((d) => clean(d.id, d.data()))
+    .map((d) => clean(d.id, d.data(), role))
     .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   return NextResponse.json({ cases });
 }
@@ -44,6 +57,14 @@ const OPTIONAL_KEYS = [
 ] as const;
 
 export async function POST(req: Request) {
+  let uid = "anon";
+  try {
+    const auth = await verifyRequest(req);
+    uid = auth?.uid ?? "anon";
+  } catch (e) {
+    if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
+  }
+
   const db = getAdminDb();
   const input = await req.json();
   if (!input?.kind || !input?.centreId) {
@@ -59,6 +80,7 @@ export async function POST(req: Request) {
     centreId: input.centreId,
     language: input.language,
     gender: input.gender ?? "unknown",
+    reporterUid: uid,
     createdAt: now,
     updatedAt: now,
   };
@@ -73,7 +95,7 @@ export async function POST(req: Request) {
 
   let shareLinkId: string | undefined;
   if (input.kind === "missing") {
-    shareLinkId = randomUUID().replace(/-/g, "").slice(0, 12);
+    shareLinkId = randomUUID().replace(/-/g, "");
     await db.collection("shareLinks").doc(shareLinkId).set({
       id: shareLinkId,
       caseId: ref.id,

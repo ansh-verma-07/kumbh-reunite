@@ -1,7 +1,9 @@
 // GET /api/zones -> { zones: [...] }
-// Live risk score per PRD §5. case_density comes from open cases grouped by
-// lastSeenZone; chokepoint/CCTV come from static zone data. Computed at request
-// time (a Cloud Scheduler recompute-and-store would be the production path).
+// Live risk score per PRD §5. case_density from open Firestore cases;
+// chokepointCount from ZONE_DATA (pre-computed via 500m haversine at module
+// load in constants.ts — accurate, zero per-request cost). cameraCount drives
+// cctvGap. Risk score recomputed per request; a Cloud Scheduler job would
+// cache this on zone docs in production.
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { ZONE_DATA } from "@/lib/constants";
@@ -27,9 +29,9 @@ export async function GET() {
   for (const d of snap.docs) {
     const z = (d.data().lastSeenZone as string | undefined)?.trim();
     if (!z) continue;
-    // Match the free-text zone against a known zone by loose contains.
     const meta = ZONE_DATA.find(
-      (m) => m.name.toLowerCase() === z.toLowerCase() ||
+      (m) =>
+        m.name.toLowerCase() === z.toLowerCase() ||
         m.name.toLowerCase().includes(z.toLowerCase()) ||
         z.toLowerCase().includes(m.name.toLowerCase()),
     );
@@ -39,11 +41,13 @@ export async function GET() {
 
   const maxCases = Math.max(1, ...ZONE_DATA.map((z) => activeByZone.get(z.name) ?? 0));
   const maxCameras = Math.max(1, ...ZONE_DATA.map((z) => z.cameraCount));
+  // chokepointCount already reflects 500m haversine proximity from constants.ts
   const maxChoke = Math.max(1, ...ZONE_DATA.map((z) => z.chokepointCount));
 
   const zones = ZONE_DATA.map((z) => {
     const active = activeByZone.get(z.name) ?? 0;
     const caseDensity = active / maxCases;
+    // PRD §5: chokepoint_proximity = chokepoints_within_500m / max
     const chokeProximity = z.chokepointCount / maxChoke;
     const cctvGap = 1 - z.cameraCount / maxCameras;
     const riskScore = caseDensity * 0.5 + chokeProximity * 0.3 + cctvGap * 0.2;
