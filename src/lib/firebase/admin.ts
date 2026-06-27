@@ -4,6 +4,7 @@ import "server-only";
 
 import { initializeApp, getApps, cert, type App, type AppOptions } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getAuth, type Auth } from "firebase-admin/auth";
 
 let _db: Firestore | null = null;
 
@@ -22,4 +23,13 @@ export function getAdminDb(): Firestore {
   const app: App = getApps().length ? getApps()[0] : initializeApp(opts);
   _db = getFirestore(app);
   return _db;
+}
+
+let _auth: Auth | null = null;
+export function getAdminAuth(): Auth {
+  if (_auth) return _auth;
+  // Reuse the already-initialised app.
+  getAdminDb(); // ensures app is initialised
+  _auth = getAuth(getApps()[0]);
+  return _auth;
 }

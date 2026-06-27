@@ -1,8 +1,9 @@
 // POST/GET /api/cron/tick[?accelerate=1]
 // Stand-in for Cloud Scheduler. Processes: PA twice-broadcast + node expansion,
 // dhash same-photo conflict detection (PRD §8.3), long-duration escalation
-// (Flow E). ?accelerate=1 treats day-thresholds as minutes so escalation is
-// demoable. A production deploy points Cloud Scheduler at this route.
+// (Flow E) including postcard trigger and iGOT portal escalation. ?accelerate=1
+// treats day-thresholds as minutes for demo. A production deploy points Cloud
+// Scheduler at this route.
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -13,6 +14,39 @@ export const runtime = "nodejs";
 
 const ROUND2_DELAY_MS = 15 * 60 * 1000;
 const EXPAND_DELAY_MS = 2 * 60 * 60 * 1000;
+
+/** Fire postcard trigger for no-mobile cases (Flow E §3). */
+async function triggerPostcard(caseId: string, caseHumanId: string, address?: string) {
+  // Production: call a postcard/physical-mail API (e.g. Lob.com) here.
+  // Logged as a structured event for now so the pipeline is complete.
+  console.log(
+    JSON.stringify({
+      event: "postcard_trigger",
+      caseId,
+      caseHumanId,
+      address: address ?? null,
+      triggeredAt: Date.now(),
+    }),
+  );
+}
+
+/** Push case to national iGOT portal (Flow E §4). */
+async function pushToIgot(caseId: string, caseHumanId: string, data: Record<string, unknown>) {
+  // Production: POST to the iGOT API endpoint with case summary.
+  // Logged as a structured event; the escalationStage field is set to "national".
+  console.log(
+    JSON.stringify({
+      event: "igot_escalation",
+      caseId,
+      caseHumanId,
+      name: data.name ?? null,
+      gender: data.gender ?? null,
+      ageBand: data.ageBand ?? null,
+      lastSeenZone: data.lastSeenZone ?? null,
+      pushedAt: Date.now(),
+    }),
+  );
+}
 
 async function tick(accelerate: boolean) {
   const db = getAdminDb();
@@ -25,6 +59,8 @@ async function tick(accelerate: boolean) {
     bureau: 0,
     national: 0,
     reconfirm: 0,
+    postcards: 0,
+    igotPushed: 0,
     retentionMobile: 0,
     retentionPhoto: 0,
   };
@@ -68,7 +104,7 @@ async function tick(accelerate: boolean) {
   for (const [, docs] of byHash) {
     if (docs.length < 2) continue;
     const centres = new Set(docs.map((d) => d.data().centreId));
-    if (centres.size < 2) continue; // same centre re-upload isn't a cross-centre conflict
+    if (centres.size < 2) continue;
     for (const d of docs) {
       if (!d.data().mergeReview) {
         await d.ref.update({
@@ -91,8 +127,10 @@ async function tick(accelerate: boolean) {
     const c = d.data();
     const age = now - (c.createdAt ?? now);
     const stage = c.escalationStage ?? "active";
+
     if (stage === "active" && age >= archiveAfter) {
-      await d.ref.update({ escalationStage: "archived", archivedAt: now });
+      // Event ended — archive case and extend share link to 30 days.
+      await d.ref.update({ escalationStage: "archived", archivedAt: now, updatedAt: now });
       if (c.shareLinkId) {
         await db
           .collection("shareLinks")
@@ -102,15 +140,46 @@ async function tick(accelerate: boolean) {
       }
       actions.archived++;
     } else if (stage === "archived" && age >= bureauAfter) {
-      await d.ref.update({ escalationStage: "bureau", lastReconfirmAt: now });
-      await sendSms(c.reporterMobile, `Case ${c.caseId} forwarded to Maharashtra Missing Persons Bureau. Reply to update details.`);
+      // Day 30 — forward to Maharashtra Missing Persons Bureau.
+      await d.ref.update({ escalationStage: "bureau", lastReconfirmAt: now, updatedAt: now });
+      await sendSms(
+        c.reporterMobile,
+        `Case ${c.caseId} has been forwarded to Maharashtra Missing Persons Bureau. Reply to update details.`,
+      );
       actions.bureau++;
     } else if (stage === "bureau" && age >= nationalAfter) {
-      await d.ref.update({ escalationStage: "national" });
+      // Month 6 — escalate to national iGOT portal; re-issue share link indefinitely.
+      await d.ref.update({ escalationStage: "national", updatedAt: now });
+      await pushToIgot(d.id, c.caseId, c);
+      // Re-issue share link with no expiry (expiresAt = year 9999).
+      if (c.shareLinkId) {
+        await db
+          .collection("shareLinks")
+          .doc(c.shareLinkId)
+          .update({ expiresAt: 253402300800000 }) // 9999-12-31
+          .catch(() => {});
+      }
+      actions.igotPushed++;
       actions.national++;
-    } else if ((stage === "bureau" || stage === "national") && now - (c.lastReconfirmAt ?? 0) >= reconfirmEvery) {
-      await d.ref.update({ lastReconfirmAt: now });
-      await sendSms(c.reporterMobile, `Case ${c.caseId} is still active. Tap to update the photo or add new details.`);
+    } else if (
+      (stage === "bureau" || stage === "national") &&
+      now - (c.lastReconfirmAt ?? 0) >= reconfirmEvery
+    ) {
+      // Every 90 days — re-confirmation outreach.
+      await d.ref.update({ lastReconfirmAt: now, updatedAt: now });
+
+      if (c.reporterMobile) {
+        // SMS re-confirmation.
+        await sendSms(
+          c.reporterMobile,
+          `Case ${c.caseId} is still active. Tap to update the photo or add new details.`,
+        );
+      } else {
+        // No mobile — trigger postcard to Aadhaar home address (Flow E §3).
+        const address = c.aadhaarAddress as string | undefined;
+        await triggerPostcard(d.id, c.caseId, address);
+        actions.postcards++;
+      }
       actions.reconfirm++;
     }
   }

@@ -1,8 +1,8 @@
 // POST /api/cases/[id]/enrich
-// Server-side enrichment (runs when online; offline-created docs are enriched
-// on reconnect). Gemini normalizes the description + produces a multilingual
-// embedding; Firestore findNearest surfaces duplicate/match candidates.
-// Humans confirm — this endpoint only suggests. (PRD §4 Flow A/B.)
+// Server-side enrichment: Gemini normalizes description + produces a
+// multilingual embedding. Matching pipeline (Flow B) runs colour+gender+age
+// filter FIRST to narrow the candidate pool, then cosine similarity ranks the
+// filtered set. Humans confirm — this endpoint only suggests. (PRD §4 Flow A/B.)
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -24,6 +24,16 @@ function colourOverlap(a: string[] = [], b: string[] = []): number {
   return m / Math.max(a.length, b.length);
 }
 
+function cosineSim(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+}
+
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -37,7 +47,6 @@ export async function POST(
   }
   const data = snap.data() as Omit<CaseDoc, "id">;
 
-  // Build the text to normalize + embed (handles all 10 languages natively).
   const parts = [data.name, data.descriptionRaw, (data.conditionTags ?? []).join(" ")]
     .filter(Boolean)
     .join(". ");
@@ -59,34 +68,43 @@ export async function POST(
     updatedAt: Date.now(),
   });
 
-  // Duplicate / match candidates: nearest OPEN 'missing' cases.
-  // (Missing case -> other missing = duplicate; Found case -> missing = match.)
+  // PRD Flow B matching pipeline:
+  // Step 1 — colour + gender + age filter narrows open missing cases (~20).
+  // Step 2 — cosine similarity on the filtered set ranks them.
+  // This ensures expensive similarity runs only on plausible candidates.
+  const DUP_THRESHOLD = 0.78;
+  const WINDOW_MS = 72 * 60 * 60 * 1000;
   let candidates: DuplicateCandidate[] = [];
-  const DUP_THRESHOLD = 0.78; // PRD §3 / HTML Feature 3: top matches above 0.78 cosine
-  const WINDOW_MS = 72 * 60 * 60 * 1000; // compare against open cases in the past 72h
+
   try {
-    const vq = adminDb
+    // Fetch all open missing cases within the 72-hour window.
+    const openSnap = await adminDb
       .collection("cases")
       .where("status", "==", "missing")
-      .findNearest({
-        vectorField: "embedding",
-        queryVector: FieldValue.vector(vector),
-        limit: 10,
-        distanceMeasure: "COSINE",
-        distanceResultField: "_distance",
-      });
-    const res = await vq.get();
-    for (const d of res.docs) {
-      if (d.id === id) continue; // skip self
-      const c = d.data() as CaseDoc & { _distance?: number };
-      const similarity = 1 - (c._distance ?? 1); // COSINE distance -> similarity
-      if (similarity < DUP_THRESHOLD) continue;
-      if (c.createdAt && Date.now() - c.createdAt > WINDOW_MS) continue; // 72h window
-      // Flow B funnel: for a found person, narrow by gender + age band when known.
-      if (data.kind === "found") {
-        if (data.gender !== "unknown" && c.gender !== "unknown" && c.gender !== data.gender) continue;
-        if (data.ageBand && c.ageBand && data.ageBand !== c.ageBand) continue;
+      .limit(2000)
+      .get();
+
+    const now = Date.now();
+    // Step 1: colour + gender + age pre-filter.
+    const preFiltered = openSnap.docs.filter((d) => {
+      if (d.id === id) return false;
+      const c = d.data() as CaseDoc & { embedding?: number[] };
+      if (!c.embedding) return false;
+      if (c.createdAt && now - c.createdAt > WINDOW_MS) return false;
+      if (data.gender !== "unknown" && c.gender !== "unknown" && c.gender !== data.gender) return false;
+      if (data.ageBand && c.ageBand && data.ageBand !== c.ageBand) return false;
+      // Colour overlap: keep if no signature on either side OR overlap > 0.
+      if (data.colourSignature?.length && c.colourSignature?.length) {
+        if (colourOverlap(data.colourSignature, c.colourSignature) === 0) return false;
       }
+      return true;
+    });
+
+    // Step 2: cosine similarity on the pre-filtered set.
+    for (const d of preFiltered) {
+      const c = d.data() as CaseDoc & { embedding?: number[] };
+      const similarity = cosineSim(vector, c.embedding!);
+      if (similarity < DUP_THRESHOLD) continue;
       candidates.push({
         caseId: d.id,
         name: c.name,
@@ -97,17 +115,17 @@ export async function POST(
         colourOverlap: colourOverlap(data.colourSignature, c.colourSignature),
       });
     }
-    // Top-3, ranked by similarity then colour-signature overlap.
+
+    // Top 5 ranked by similarity then colour overlap.
     candidates = candidates
       .sort((a, b) => b.similarity - a.similarity || b.colourOverlap - a.colourOverlap)
-      .slice(0, 3);
+      .slice(0, 5);
   } catch (e) {
-    // findNearest needs the vector index deployed; degrade gracefully.
-    console.error("findNearest failed (is the vector index deployed?)", e);
+    console.error("candidate search failed", e);
   }
 
   // PA announcement (Flow A step 7): generate once for missing cases with
-  // enough info. Twice-broadcast scheduling is handled on approve + the cron tick.
+  // enough info. Twice-broadcast scheduling handled on approve + cron tick.
   try {
     if (data.kind === "missing" && (data.name || data.descriptionRaw)) {
       const existing = await adminDb
@@ -116,7 +134,7 @@ export async function POST(
         .limit(1)
         .get();
       if (existing.empty) {
-        const text = await generateAnnouncement({
+        const paText = await generateAnnouncement({
           language: data.language,
           name: data.name,
           ageBand: data.ageBand,
@@ -128,7 +146,7 @@ export async function POST(
           caseId: id,
           caseHumanId: data.caseId,
           language: data.language,
-          text,
+          text: paText,
           node: nearestTransferNode(data.lastSeenZone),
           status: "pending",
           broadcasts: [],

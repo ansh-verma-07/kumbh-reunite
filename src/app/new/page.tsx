@@ -321,6 +321,26 @@ function DoneCard({
     : null;
   const [merged, setMerged] = useState<string | null>(null);
   const [probable, setProbable] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function copyLink() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {
+      // Fallback for browsers without clipboard API permission.
+      const ta = document.createElement("textarea");
+      ta.value = shareUrl;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
 
   async function confirmMerge(intoCaseId: string) {
     await mergeCase(result.id, intoCaseId);
@@ -350,9 +370,18 @@ function DoneCard({
           <p className="text-xs font-semibold mb-2">
             Share in the family WhatsApp group. Anyone can open it — no app, no login.
           </p>
-          <code className="block text-sm break-all bg-[var(--cyan)] border-[3px] border-ink p-2 font-bold">
-            {shareUrl}
-          </code>
+          <div className="flex items-stretch gap-0 border-[3px] border-ink">
+            <code className="flex-1 text-sm break-all bg-[var(--cyan)] p-2 font-bold">
+              {shareUrl}
+            </code>
+            <button
+              type="button"
+              onClick={copyLink}
+              className="px-3 py-2 font-extrabold text-xs uppercase bg-ink text-white shrink-0 hover:opacity-80 active:opacity-60 transition-opacity"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
         </div>
       )}
 
